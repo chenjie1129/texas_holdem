@@ -56,12 +56,32 @@ class Player:
         self.chips -= amount
         return amount
 
+class GTOStrategy:
+    @staticmethod
+    def evaluate_hand_strength(hole_cards, community_cards):
+        """评估手牌强度(0-1)"""
+        # 简化版手牌强度评估
+        high_card = max(card.rank.value for card in hole_cards)
+        return high_card / 14
+        
+    @staticmethod
+    def calculate_equity(hole_cards, community_cards, pot_odds):
+        """计算权益与赔率"""
+        hand_strength = GTOStrategy.evaluate_hand_strength(hole_cards, community_cards)
+        return hand_strength > pot_odds
+        
+    @staticmethod
+    def get_position_adjustment(position, total_players):
+        """根据位置调整策略"""
+        return (total_players - position) / total_players
+
 class TexasHoldem:
     def __init__(self, player_names):
         self.players = [Player(name) for name in player_names]
         self.deck = Deck()
         self.community_cards = []
         self.pot = 0
+        self.current_round = 0
     
     def deal_hole_cards(self):
         for _ in range(2):
@@ -96,12 +116,20 @@ class TexasHoldem:
                         elif choice == 2:  # Bet
                             bet_amount = int(input("Enter bet amount: "))
                             # 简化版GTO评估逻辑
-                            if bet_amount >= 50 and len(self.community_cards) < 3:
-                                print("\nGTO提示: 下注金额符合GTO策略")
-                            elif bet_amount < 50 and len(self.community_cards) >= 3:
-                                print("\nGTO提示: 建议增加下注金额")
+                            position = self.players.index(player)
+                            pot_odds = bet_amount / (bet_amount + self.pot) if self.pot > 0 else 0
+                            hand_strength = GTOStrategy.evaluate_hand_strength(player.hand, self.community_cards)
+                            position_adjustment = GTOStrategy.get_position_adjustment(position, len(self.players))
+                            
+                            if GTOStrategy.calculate_equity(player.hand, self.community_cards, pot_odds):
+                                if bet_amount >= 50 * (1 + position_adjustment) and len(self.community_cards) < 3:
+                                    print("\nGTO提示: 强牌+有利位置，下注金额符合GTO策略")
+                                elif bet_amount < 50 * (1 + position_adjustment) and len(self.community_cards) >= 3:
+                                    print(f"\nGTO提示: 建议下注{int(50 * (1 + position_adjustment))}以上")
+                                else:
+                                    print("\nGTO提示: 下注金额在合理范围内")
                             else:
-                                print("\nGTO提示: 下注金额在合理范围内")
+                                print("\nGTO提示: 权益不足，建议弃牌或控制下注")
                             break
                         elif choice == 3:  # Fold
                             print("\nGTO提示: 弃牌可能是正确的选择")
@@ -111,7 +139,15 @@ class TexasHoldem:
                     except ValueError:
                         print("Please enter a valid number")
             else:  # AI player
-                bet_amount = random.randint(10, 100)
+                position = self.players.index(player)
+                pot_odds = 0.3  # 默认赔率
+                hand_strength = GTOStrategy.evaluate_hand_strength(player.hand, self.community_cards)
+                position_adjustment = GTOStrategy.get_position_adjustment(position, len(self.players))
+                
+                if GTOStrategy.calculate_equity(player.hand, self.community_cards, pot_odds):
+                    bet_amount = int(50 * (1 + position_adjustment) * hand_strength)
+                else:
+                    bet_amount = 0 if random.random() < 0.7 else int(30 * hand_strength)
             
             self.pot += player.bet(bet_amount)
         return True
